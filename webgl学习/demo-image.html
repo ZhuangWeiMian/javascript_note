@@ -1,0 +1,172 @@
+<!-- 图片不能跨域，需配置代理 -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+
+<body onload="main()">
+    <canvas id="glcanvas" width="600" height="600">
+        你的浏览器似乎不支持或者禁用了HTML5 <code>&lt;canvas&gt;</code> 元素.
+    </canvas>
+
+    <script>
+        function main() {
+            const canvas = document.querySelector('#glcanvas');
+            const gl = canvas.getContext('webgl');
+
+            if (!gl) {
+                alert('不支持webgl');
+                return;
+            }
+            const vsSource = `
+                attribute vec4 aVertexPosition;
+                attribute vec2 aTexCoord;
+                
+                varying  vec2 vTexcoord;
+
+                void main() {
+                gl_Position = aVertexPosition;
+                vTexcoord = aTexCoord;
+                }`;
+
+            const fsSource = `
+                precision lowp float; // 必须指明float的精度，因为计算过程中片段着色器的精度没有默认
+
+                varying vec2 vTexcoord;
+                
+                uniform sampler2D uSample;
+                
+                void main() {
+                gl_FragColor =  vec4(texture2D(uSample, vTexcoord));
+                }
+            `;
+
+            function createShader(gl, type, source) {
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+
+                gl.compileShader(shader);
+
+                return shader;
+            }
+
+            function initShaderProgram(gl, vsSource, fsSource) {
+                const vshader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+                const fshader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+                const shaderProgram = gl.createProgram();
+                gl.attachShader(shaderProgram, vshader);
+                gl.attachShader(shaderProgram, fshader);
+                gl.linkProgram(shaderProgram);
+                return shaderProgram;
+            }
+
+            function initBuffer(gl) {
+                const positionBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+                const vertice = new Float32Array([
+                    -1.0, 1.0,
+                    -1.0, -1.0,
+                    1.0, -1.0,
+                    1.0, 1.0
+                ]);
+
+                gl.bufferData(gl.ARRAY_BUFFER, vertice, gl.STATIC_DRAW);
+
+                // 纹理坐标
+                const textureCoord= [
+                    0.0, 1.0,
+                    0.0, 0.0,
+                    1.0, 0.0,
+                    1.0, 1.0
+                ];
+                const textureBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER,
+                    new Float32Array(textureCoord),
+                    gl.STATIC_DRAW
+                )
+
+                return {
+                    position: positionBuffer,
+                    texture: textureBuffer
+                }
+            }
+
+            function initTexture(gl) {
+                const texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+                return texture;
+            }
+
+            function drawScene(shaderProgram, buffer, texture) {
+                // 绑定缓冲
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffer.position);
+                gl.enableVertexAttribArray(
+                    gl.getAttribLocation(shaderProgram, 'aVertexPosition')
+                );
+                
+                gl.vertexAttribPointer(
+                    gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+                    2,
+                    gl.FLOAT,
+                    false,
+                    0,
+                    0
+                );
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffer.texture);
+                gl.enableVertexAttribArray(
+                    gl.getAttribLocation(shaderProgram, 'aTexCoord')
+                )
+                gl.vertexAttribPointer(
+                    gl.getAttribLocation(shaderProgram, 'aTexCoord'),
+                    2,
+                    gl.FLOAT,
+                    false,
+                    0,
+                    0
+                )
+
+                gl.useProgram(shaderProgram);
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                // 上下翻转y轴, 因为绘制图片的过程是反的
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+
+            }
+
+            const buffer = initBuffer(gl);
+            const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+            const texture = initTexture(gl);
+            drawScene(shaderProgram, buffer, texture);
+            const image = new Image();
+            image.src = 'http://y.qq.com/music/photo_new/T002R800x800M000002wPClt2fJuzF_1.jpg';
+            image.onload = function () {
+                gl.texImage2D(
+                    gl.TEXTURE_2D,
+                    0,
+                    gl.RGBA,
+                    gl.RGBA,
+                    gl.UNSIGNED_BYTE,
+                    image
+                );
+                gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);// 设置绘制模式和绘制的顶点个数
+
+            }
+        }
+
+
+    </script>
+</body>
+
+</html>

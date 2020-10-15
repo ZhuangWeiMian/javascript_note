@@ -1,0 +1,239 @@
+<!-- 图片不能跨域，需配置代理 -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+
+<body onload="main()">
+    <div>
+        <canvas id="glcanvas" width="600" height="600">
+            你的浏览器似乎不支持或者禁用了HTML5 <code>&lt;canvas&gt;</code> 元素.
+        </canvas>
+    </div>
+
+
+    <script>
+        function main() {
+            const canvas = document.querySelector('#glcanvas');
+            const gl = canvas.getContext('webgl');
+
+            if (!gl) {
+                alert('不支持webgl');
+                return;
+            }
+            const vsSource = `
+                attribute vec4 aVertexPosition;
+                attribute vec2 aTexCoord;
+                
+                varying  vec2 vTexcoord;
+
+                void main() {
+                gl_Position = aVertexPosition;
+                vTexcoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);
+                }`;
+
+            const fsSource = `
+                precision lowp float; // 必须指明float的精度，因为计算过程中片段着色器的精度没有默认
+
+                varying vec2 vTexcoord;
+                
+                uniform sampler2D uSample;
+                uniform sampler2D uSample1;
+
+                uniform lowp float intensity;
+                
+                void main() {
+                    lowp vec4 textureColor = texture2D(uSample, vTexcoord);
+     
+                    lowp float blueColor = textureColor.b * 63.0;
+                    
+                    lowp vec2 quad1;
+                    quad1.y = floor(floor(blueColor) / 8.0);
+                    quad1.x = floor(blueColor) - (quad1.y * 8.0);
+                    
+                    lowp vec2 quad2;
+                    quad2.y = floor(ceil(blueColor) / 8.0);
+                    quad2.x = ceil(blueColor) - (quad2.y * 8.0);
+                    
+                    lowp vec2 texPos1;
+                    texPos1.x = (quad1.x * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.r);
+                    texPos1.y = (quad1.y * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.g);
+                    
+                    lowp vec2 texPos2;
+                    texPos2.x = (quad2.x * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.r);
+                    texPos2.y = (quad2.y * 0.125) + 0.5/512.0 + ((0.125 - 1.0/512.0) * textureColor.g);
+                    
+                    lowp vec4 newColor1 = texture2D(uSample1, texPos1);
+                    lowp vec4 newColor2 = texture2D(uSample1, texPos2);
+                    
+                    lowp vec4 newColor = mix(newColor1, newColor2, fract(blueColor));
+                    gl_FragColor = mix(textureColor, vec4(newColor.rgb, textureColor.w), 1.0);
+                }
+            `;
+
+            function createShader(gl, type, source) {
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+
+                gl.compileShader(shader);
+
+                return shader;
+            }
+
+            function initShaderProgram(gl, vsSource, fsSource) {
+                const vshader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+                const fshader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+                const shaderProgram = gl.createProgram();
+                gl.attachShader(shaderProgram, vshader);
+                gl.attachShader(shaderProgram, fshader);
+                gl.linkProgram(shaderProgram);
+                return shaderProgram;
+            }
+
+            function initBuffer(gl, width, height) {
+                const positionBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+                const r = Math.sqrt(width*width+height*height);
+                const x = width / r;
+                const y = height / r;
+                const vertice = new Float32Array([
+                    -x, y,
+                    -x, -y,
+                    x, -y,
+                    x, y
+                ]);
+
+                gl.bufferData(gl.ARRAY_BUFFER, vertice, gl.STATIC_DRAW);
+
+                // 纹理坐标
+                const textureCoord = [
+                    0.0, 1.0,
+                    0.0, 0.0,
+                    1.0, 0.0,
+                    1.0, 1.0
+                ];
+                const textureBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER,
+                    new Float32Array(textureCoord),
+                    gl.STATIC_DRAW
+                )
+
+                return {
+                    position: positionBuffer,
+                    texture: textureBuffer
+                }
+            }
+
+            function initTexture(gl) {
+                const texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+                return texture;
+            }
+
+            function drawScene(shaderProgram, buffer, image, filter) {
+                // 绑定缓冲
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffer.position);
+                gl.enableVertexAttribArray(
+                    gl.getAttribLocation(shaderProgram, 'aVertexPosition')
+                );
+
+                gl.vertexAttribPointer(
+                    gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+                    2,
+                    gl.FLOAT,
+                    false,
+                    0,
+                    0
+                );
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffer.texture);
+                gl.enableVertexAttribArray(
+                    gl.getAttribLocation(shaderProgram, 'aTexCoord')
+                )
+                gl.vertexAttribPointer(
+                    gl.getAttribLocation(shaderProgram, 'aTexCoord'),
+                    2,
+                    gl.FLOAT,
+                    false,
+                    0,
+                    0
+                )
+                gl.useProgram(shaderProgram);
+
+                var texture = gl.createTexture();
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+
+                // Set the parameters so we can render any size image.
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+                // Upload the image into the texture.
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+
+                gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 0);
+
+
+                const textureUnitIndex = 1; // 用单元 1.
+                const u_imageLoc = gl.getUniformLocation(
+                    shaderProgram, "uSample1");
+                var filterTexture = gl.createTexture();
+                gl.activeTexture(gl.TEXTURE0 + textureUnitIndex);
+                gl.bindTexture(gl.TEXTURE_2D, filterTexture);
+
+                // Set the parameters so we can render any size image.
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+
+                gl.texImage2D(
+                    gl.TEXTURE_2D,
+                    0,
+                    gl.RGBA,
+                    gl.RGBA,
+                    gl.UNSIGNED_BYTE,
+                    filter
+                );
+
+                gl.uniform1i(u_imageLoc, textureUnitIndex);
+
+                gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+            }
+
+            const image = new Image();
+            image.src = 'http://y.qq.com/test/2663831.jpg'; // 原图，链接需要替换
+            const filter = new Image();
+            filter.src = 'http://y.qq.com/test/snow.png'; // 纹理图片，链接需要替换
+
+            image.onload = function () {
+                filter.onload = function () {
+                    const width = image.width;
+                    const height = image.height;
+                    const buffer = initBuffer(gl, width, height);
+                    const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+                    drawScene(shaderProgram, buffer, image, filter);
+                }
+            }
+        }
+
+
+    </script>
+</body>
+
+</html>
