@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <style>
+        .video_demo {
+            position: absolute;
+            z-index: 10;
+            top: -.08rem;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0);
+        }
+
+        .open__cover.static {
+            width: 3.75rem;
+            height: 3.1rem;
+            left: 50%;
+            margin-left: -1.825rem;
+            top: -.15rem;
+        }
+
+        .video_canvas {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body style="background-color: black;">
+    <div class="video_demo" style="visibility: visible;"><canvas class="video_canvas"
+            id="js_output_2" width="1680" height="2368"></canvas></div>
+    <script src="./alpha-video-webgl.js" inline></script>
+    <script>
+        this.headMv = new AlphaVideo({
+            src: "https://dlied5sdk.myapp.com/music/release/upload/t_mm_file_publish/2868412.mp4",
+            width: document.body.clientWidth,
+            height: (375 * document.body.clientWidth) / 266,
+            loop: true, // 是否循环播放
+            canvas: document.getElementById('js_output_2'),
+        });
+        this.headMv.play();
+    </script>
+</body>
+
+</html>
